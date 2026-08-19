@@ -1,0 +1,43 @@
+spring:
+    application:
+        name: booking-service
+
+    datasource:
+        url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5435}/booking_db
+        username: ${DB_USERNAME:postgres}
+        password: ${DB_PASSWORD}
+        driver-class-name: org.postgresql.Driver
+
+    jpa:
+        hibernate:
+            ddl-auto: update
+        show-sql: true
+        properties:
+            hibernate:
+                format_sql: true
+        database-platform: org.hibernate.dialect.PostgreSQLDialect
+
+    kafka:
+        bootstrap-servers: ${KAFKA_HOST:localhost}:9092
+        consumer:
+            group-id: booking-service
+            key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+            value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
+            properties:
+                spring.json.trusted.packages: "*"
+                spring.json.value.default.type: org.kamal.bookingservice.event.PaymentResultEvent
+                spring.json.use.type.headers: false
+        producer:
+            key-serializer: org.apache.kafka.common.serialization.StringSerializer
+            value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+
+server:
+    port: 8083
+
+jwt:
+    secret: ${JWT_SECRET}
+
+
+hotel:
+    service:
+        url: http://${HOTEL_SERVICE_HOST:localhost}:8082

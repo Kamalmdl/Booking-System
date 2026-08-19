@@ -1,0 +1,21 @@
+# --- Secrets / local config ---
+.env
+.env.*
+!.env.example
+
+# --- Maven build output ---
+target/
+!.mvn/wrapper/maven-wrapper.jar
+
+# --- IDE ---
+.idea/
+*.iws
+*.iml
+*.ipr
+.vscode/
+
+# --- OS ---
+.DS_Store
+
+# --- Logs ---
+*.log
