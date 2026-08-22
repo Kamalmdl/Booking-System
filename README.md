@@ -4,34 +4,37 @@ A learning-focused pet project: a hotel booking system built from scratch on a m
 
 ## Architecture
 
-┌──────────────┐ REST (sync) ┌───────────────┐
-│ Client │ ──────────────────────▶ API endpoints │
-└──────────────┘ └───────────────┘
+```
+┌──────────────┐      REST (sync)      ┌───────────────┐
+│    Client    │ ──────────────────────▶ API endpoints  │
+└──────────────┘                        └───────────────┘
 
-User Service (8081) Hotel Service (8082)
-┌─────────────┐ ┌─────────────┐
-│ user_db │ │ hotel_db │
-└─────────────┘ └─────────────┘
-▲ ▲
-│ issues JWT │ RestClient (sync)
-│ │
-Booking Service (8083) ──────────┘
-┌─────────────┐
-│ booking_db │
-└──────┬──────┘
-│ Kafka: payment-requests (async)
-▼
-Payment Service (8084)
-┌─────────────┐
-│ payment_db │
-└──────┬──────┘
-│ Kafka: payment-results (async)
-▼
-Booking Service (updates booking status)
-│
-│ Kafka: payment-results (async)
-▼
-Notification Service (8085, no own DB, stateless)
+  User Service (8081)        Hotel Service (8082)
+  ┌─────────────┐            ┌─────────────┐
+  │  user_db    │            │  hotel_db   │
+  └─────────────┘            └─────────────┘
+        ▲                          ▲
+        │ issues JWT                │ RestClient (sync)
+        │                          │
+  Booking Service (8083) ──────────┘
+  ┌─────────────┐
+  │ booking_db  │
+  └──────┬──────┘
+         │ Kafka: payment-requests (async)
+         ▼
+  Payment Service (8084)
+  ┌─────────────┐
+  │ payment_db  │
+  └──────┬──────┘
+         │ Kafka: payment-results (async)
+         ▼
+  Booking Service (updates booking status)
+         │
+         │ Kafka: payment-results (async)
+         ▼
+  Notification Service (8085, no own DB, stateless)
+```
+
 
 
 **5 independent services**, each its own Spring Boot project (Maven), each with its own database (**database-per-service**):
