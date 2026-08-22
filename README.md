@@ -108,9 +108,27 @@ These topics were discussed conceptually but not implemented — a separate stag
 
 ## Running the Project
 
-```bash
+## Setup
+
+Before running the project, generate an RSA key pair for JWT signing:
+
+\`\`\`powershell
+cd user-service/src/main/resources
+mkdir keys
+cd keys
+openssl genpkey -algorithm RSA -out private_key.pem -pkeyopt rsa_keygen_bits:2048
+openssl rsa -pubout -in private_key.pem -out public_key.pem
+\`\`\`
+
+Then copy `public_key.pem` into:
+- `hotel-service/src/main/resources/keys/`
+- `booking-service/src/main/resources/keys/`
+
+After that, run:
+\`\`\`powershell
 docker compose up --build
-```
+\`\`\`
+
 
 Brings up all 5 services, 4 databases, and Kafka on a shared Docker network. The first run may take a few minutes (building the Maven images).
 

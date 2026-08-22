@@ -1,26 +1,36 @@
 package org.kamal.userservice.security;
 
 import io.jsonwebtoken.Jwts;
-import io.jsonwebtoken.security.Keys;
 import jakarta.annotation.PostConstruct;
 import org.kamal.userservice.entity.Role;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.core.io.Resource;
 import org.springframework.stereotype.Service;
 
-import javax.crypto.SecretKey;
+import java.security.KeyFactory;
+import java.security.PrivateKey;
+import java.security.spec.PKCS8EncodedKeySpec;
+import java.util.Base64;
 import java.util.Date;
 
 @Service
 public class JwtService {
 
-    @Value("${jwt.secret}")
-    private String secretKeyString;
+    @Value("classpath:keys/private_key.pem")
+    private Resource privateKeyResource;
 
-    private SecretKey secretKey;
+    private PrivateKey privateKey;
 
     @PostConstruct
-    public void init() {
-        this.secretKey = Keys.hmacShaKeyFor(secretKeyString.getBytes());
+    public void init() throws Exception{
+        String key = new String(privateKeyResource.getInputStream().readAllBytes())
+                .replace("----BEGIN PRIVATE KEY----", "")
+                .replace("----END PRIVATE KEY----", "")
+                .replaceAll("\\s","");
+        byte[] decoded = Base64.getDecoder().decode(key);
+        PKCS8EncodedKeySpec keySpec = new PKCS8EncodedKeySpec(decoded);
+        KeyFactory keyFactory = KeyFactory.getInstance("RSA");
+        this.privateKey = keyFactory.generatePrivate(keySpec);
     }
 
     private final long expirationMs = 1000 * 60 * 60;
@@ -32,44 +42,7 @@ public class JwtService {
                 .claim("userId", userId)
                 .issuedAt(new Date())
                 .expiration(new Date(System.currentTimeMillis() +  expirationMs))
-                .signWith(secretKey)
+                .signWith(privateKey, Jwts.SIG.RS256)
                 .compact();
     }
-
-    public String extractEmail(String token) {
-        return Jwts.parser()
-                .verifyWith(secretKey)
-                .build()
-                .parseSignedClaims(token)
-                .getPayload()
-                .getSubject();
-    }
-
-    public String extractRole(String token) {
-        return Jwts.parser()
-                .verifyWith(secretKey)
-                .build()
-                .parseSignedClaims(token)
-                .getPayload()
-                .get("role", String.class);
-    }
-
-    public Long extractUserId(String token) {
-        return Jwts.parser()
-                .verifyWith(secretKey)
-                .build()
-                .parseSignedClaims(token)
-                .getPayload()
-                .get("userId", Long.class);
-    }
-
-    public boolean isTokenValid(String token) {
-        try {
-            extractEmail(token);
-            return true;
-        } catch (Exception e) {
-            return false;
-        }
-    }
-
 }

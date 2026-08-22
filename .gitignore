@@ -1,21 +1,22 @@
-# --- Secrets / local config ---
-.env
-.env.*
-!.env.example
-
-# --- Maven build output ---
+# Maven
 target/
-!.mvn/wrapper/maven-wrapper.jar
+*.jar
+*.class
 
-# --- IDE ---
+# IDE
 .idea/
-*.iws
 *.iml
-*.ipr
 .vscode/
 
-# --- OS ---
+# OS
 .DS_Store
+Thumbs.db
 
-# --- Logs ---
+# Logs
 *.log
+
+# Environment / secrets
+.env
+
+# Private keys — NEVER commit these
+**/keys/private_key.pem

@@ -1,3 +1,9 @@
+# Security / Keys
+*.pem
+/src/main/resources/keys/
+/keys/
+
+
 HELP.md
 target/
 .mvn/wrapper/maven-wrapper.jar
