@@ -24,8 +24,8 @@ public class JwtService {
     @PostConstruct
     public void init() throws Exception{
         String key = new String(privateKeyResource.getInputStream().readAllBytes())
-                .replace("----BEGIN PRIVATE KEY----", "")
-                .replace("----END PRIVATE KEY----", "")
+                .replace("-----BEGIN PRIVATE KEY-----", "")
+                .replace("-----END PRIVATE KEY-----", "")
                 .replaceAll("\\s","");
         byte[] decoded = Base64.getDecoder().decode(key);
         PKCS8EncodedKeySpec keySpec = new PKCS8EncodedKeySpec(decoded);

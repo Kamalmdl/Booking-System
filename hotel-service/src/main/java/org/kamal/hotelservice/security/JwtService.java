@@ -22,8 +22,8 @@ public class JwtService {
     @PostConstruct
     public void init() throws Exception {
         String key = new String(publicKeyResource.getInputStream().readAllBytes())
-                .replace("----BEGIN PUBLIC KEY----", "")
-                .replace("-----END PUBLIC KEY----", "")
+                .replace("-----BEGIN PUBLIC KEY-----", "")
+                .replace("-----END PUBLIC KEY-----", "")
                 .replaceAll("\\s","");
         byte[] decoded = Base64.getDecoder().decode(key);
         X509EncodedKeySpec keySpec = new X509EncodedKeySpec(decoded);
