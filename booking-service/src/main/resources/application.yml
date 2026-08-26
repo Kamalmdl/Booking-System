@@ -38,3 +38,10 @@ server:
 hotel:
     service:
         url: http://${HOTEL_SERVICE_HOST:localhost}:8082
+
+internal:
+    api-key: ${INTERNAL_API_KEY:some-long-random-internal-secret-change-me-2026}
+
+user:
+    service:
+        url: http://${USER_SERVICE_HOST:localhost}:8081

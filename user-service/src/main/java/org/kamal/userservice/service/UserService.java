@@ -8,6 +8,7 @@ import org.kamal.userservice.entity.Role;
 import org.kamal.userservice.entity.User;
 import org.kamal.userservice.exception.InvalidCredentialsException;
 import org.kamal.userservice.exception.UserAlreadyExistsException;
+import org.kamal.userservice.exception.UserNotFoundException;
 import org.kamal.userservice.repository.UserRepository;
 import org.kamal.userservice.security.JwtService;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -54,5 +55,10 @@ public class UserService {
         } else {
             throw new InvalidCredentialsException("Invalid credentials");
         }
+    }
+
+    public UserResponse getUser(Long id) {
+        User user = userRepository.findById(id).orElseThrow(()-> new UserNotFoundException("User not found"));
+        return UserResponse.fromEntity(user);
     }
 }

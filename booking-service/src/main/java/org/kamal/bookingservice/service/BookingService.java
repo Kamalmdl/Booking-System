@@ -1,7 +1,9 @@
 package org.kamal.bookingservice.service;
 
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.kamal.bookingservice.client.RoomClient;
+import org.kamal.bookingservice.client.UserClient;
 import org.kamal.bookingservice.dto.request.BookingRequest;
 import org.kamal.bookingservice.dto.response.BookingResponse;
 import org.kamal.bookingservice.dto.response.RoomResponse;
@@ -16,17 +18,20 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.client.HttpClientErrorException;
+import org.springframework.web.client.RestClientException;
 
 import java.math.BigDecimal;
 import java.time.temporal.ChronoUnit;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class BookingService {
 
     private final BookingRepository bookingRepository;
     private final PaymentEventProducer paymentRequestProducer;
     private final BookingTransactionService bookingTransactionService;
+    private final UserClient userClient;
 
 
     public BookingResponse createBooking(BookingRequest bookingRequest) {
@@ -43,6 +48,12 @@ public class BookingService {
         if(!booking.getUserId().equals(userId)){
             throw new BookingNotFoundException("Booking not found");
         }
-        return BookingResponse.fromEntity(booking);
+        BookingResponse response = BookingResponse.fromEntity(booking);
+        try {
+            response.setUserEmail(userClient.getUser(booking.getUserId()).getEmail());
+        } catch(RestClientException ex) {
+            log.warn("Failed to fetch {} from User service: {}", booking.getUserId(), ex.getMessage());
+        }
+        return response;
     }
 }

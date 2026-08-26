@@ -19,3 +19,6 @@ spring:
       hibernate:
         format_sql: true
     database-platform: org.hibernate.dialect.PostgreSQLDialect
+
+internal:
+  api-key: ${INTERNAL_API_KEY:some-long-random-internal-secret-change-me-2026}

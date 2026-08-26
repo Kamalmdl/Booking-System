@@ -93,6 +93,7 @@ services:
       DB_PASSWORD: ${DB_PASSWORD}
       KAFKA_HOST: kafka
       HOTEL_SERVICE_HOST: hotel-service
+      USER_SERVICE_HOST: user-service
     depends_on:
       - booking-db
       - kafka

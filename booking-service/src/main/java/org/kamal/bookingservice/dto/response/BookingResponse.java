@@ -19,6 +19,8 @@ public class BookingResponse {
 
     private Long userId;
 
+    private String userEmail;
+
     private Long roomId;
 
     private LocalDate checkInDate;
@@ -30,6 +32,6 @@ public class BookingResponse {
     private BigDecimal price;
 
     public static BookingResponse fromEntity(Booking booking) {
-        return new BookingResponse(booking.getId(), booking.getUserId(), booking.getRoomId(), booking.getCheckInDate(), booking.getCheckOutDate(), booking.getStatus(), booking.getPrice());
+        return new BookingResponse(booking.getId(), booking.getUserId(), null, booking.getRoomId(), booking.getCheckInDate(), booking.getCheckOutDate(), booking.getStatus(), booking.getPrice());
     }
 }
