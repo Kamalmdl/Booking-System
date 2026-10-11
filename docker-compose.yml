@@ -15,6 +15,8 @@ services:
       KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
       KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+    volumes:
+      - kafka-data:/var/lib/kafka/data
 
   # ---------- Databases ----------
   user-db:
@@ -26,6 +28,8 @@ services:
       POSTGRES_PASSWORD: ${DB_PASSWORD}
     ports:
       - "5433:5432"
+    volumes:
+      - user-db-data:/var/lib/postgresql/data
 
   hotel-db:
     image: postgres:16
@@ -36,6 +40,8 @@ services:
       POSTGRES_PASSWORD: ${DB_PASSWORD}
     ports:
       - "5434:5432"
+    volumes:
+      - hotel-db-data:/var/lib/postgresql/data
 
   booking-db:
     image: postgres:16
@@ -46,6 +52,8 @@ services:
       POSTGRES_PASSWORD: ${DB_PASSWORD}
     ports:
       - "5435:5432"
+    volumes:
+      - booking-db-data:/var/lib/postgresql/data
 
   payment-db:
     image: postgres:16
@@ -56,6 +64,8 @@ services:
       POSTGRES_PASSWORD: ${DB_PASSWORD}
     ports:
       - "5436:5432"
+    volumes:
+      - payment-db-data:/var/lib/postgresql/data
 
   # ---------- Application services ----------
   user-service:
@@ -120,3 +130,10 @@ services:
       KAFKA_HOST: kafka
     depends_on:
       - kafka
+
+volumes:
+  user-db-data:
+  hotel-db-data:
+  booking-db-data:
+  payment-db-data:
+  kafka-data:
