@@ -18,7 +18,7 @@ A learning-focused pet project: a hotel booking system built from scratch on a m
         │                          │
   Booking Service (8083) ──────────┘
   ┌─────────────┐
-  │ booking_db  │
+  │ booking_db  │──── RestClient (sync, X-Internal-Api-Key) ───▶ User Service
   └──────┬──────┘
          │ Kafka: payment-requests (async)
          ▼
@@ -35,13 +35,11 @@ A learning-focused pet project: a hotel booking system built from scratch on a m
   Notification Service (8085, no own DB, stateless)
 ```
 
-
-
 **5 independent services**, each its own Spring Boot project (Maven), each with its own database (**database-per-service**):
 
 | Service | Port | Database (port) | Purpose |
 |---|---|---|---|
-| User Service | 8081 | `user_db` (5433) | Registration, login, JWT issuing (email, role, userId) |
+| User Service | 8081 | `user_db` (5433) | Registration, login, JWT issuing (email, role, userId), internal user lookup for other services |
 | Hotel Service | 8082 | `hotel_db` (5434) | Manages hotels and rooms (Hotel → Room) |
 | Booking Service | 8083 | `booking_db` (5435) | Creates bookings, owns room availability |
 | Payment Service | 8084 | `payment_db` (5436) | Simulated payment processing |
@@ -49,31 +47,37 @@ A learning-focused pet project: a hotel booking system built from scratch on a m
 
 ## Key Architectural Decisions
 
-- **Database-per-service** — each service owns its own database, no direct access to another service's tables. For example, room availability lives in `Booking Service`, not `Hotel Service`, because booking is what actually manages occupancy.
-- **Synchronous communication (REST)** — Booking → Hotel via `RestClient`, used when an immediate response is required (e.g. verifying a room exists and its price before creating a booking).
+- **Database-per-service** — each service owns its own database, no direct access to another service's tables. For example, room availability lives in `Booking Service`, not `Hotel Service`, because booking is what actually manages occupancy. Cross-service references are stored as plain IDs (`userId`, `roomId`), not foreign keys.
+- **Synchronous communication (REST)** — Booking → Hotel and Booking → User via `RestClient`, used when an immediate response is required (e.g. verifying a room exists and its price before creating a booking).
 - **Asynchronous communication (Kafka, Saga pattern)** — Booking ↔ Payment ↔ Notification communicate via events rather than direct calls, where fault tolerance and time decoupling between services matter:
     - `payment-requests` — Booking Service publishes a payment request
     - `payment-results` — Payment Service publishes the result; both Booking and Notification consume it
     - Implements a **choreography-based Saga**: instead of a distributed transaction, compensating logic is used (if payment fails, the booking status changes to `PAYMENT_FAILED` rather than rolling back a physical transaction across services).
-- **Race condition protection** — booking creation uses a `PESSIMISTIC_WRITE` lock at the database level to prevent double-booking the same room for the same dates under concurrent requests.
-- **Dual-write problem** — a deliberate design choice: saving the booking to the database and publishing the Kafka event are done separately (Kafka outside the transaction), with an explicit understanding of the risks and trade-offs involved.
+- **Race condition protection** — booking creation uses a `PESSIMISTIC_WRITE` lock at the database level to prevent double-booking the same room for the same dates under concurrent requests. The slow network call to Hotel Service happens *before* the lock is taken, to keep the lock short.
+- **Dual-write problem** — a deliberate design choice: saving the booking to the database and publishing the Kafka event are done separately (Kafka outside the transaction, in a separate bean so `@Transactional` is not bypassed by self-invocation), with an explicit understanding of the risks and trade-offs involved.
+- **Graceful degradation** — enrichment calls that are not essential (e.g. fetching the user's email for `GET /bookings/{id}`) never fail the whole request: if User Service is down, the booking is still returned, just without the email.
+- **Contract independence** — each service keeps its own copy of the DTOs/events it needs (no shared library), so services are not coupled at the code level.
 
 ## Security
 
 - **JWT with RS256 (asymmetric signing)** — User Service signs tokens with a **private key** it alone possesses; Hotel Service and Booking Service hold only the **public key** and can verify signatures but never mint valid tokens. This means a compromised downstream service cannot forge tokens on behalf of User Service (a real risk with a shared symmetric HMAC secret, which was the original, now-replaced approach).
     - Token payload carries `email` (subject), `role`, and `userId`.
     - The private key is **never committed to git** (`.gitignore` excludes `**/keys/private_key.pem`); each developer generates their own local key pair (see Setup below).
-- Custom `JwtAuthFilter` in every protected service (Hotel, Booking).
+- **Service-to-service authentication** — `GET /users/{id}` is an internal endpoint: it is not reachable with a user JWT, only with a valid `X-Internal-Api-Key` header. A dedicated `InternalApiKeyFilter` integrates this into Spring Security by granting the caller a `ROLE_INTERNAL_SERVICE` authority, and the endpoint requires that role. Booking Service's `UserClient` attaches the key on every call.
+- Custom `JwtAuthFilter` in every service that verifies user tokens (Hotel, Booking).
 - `AuthenticationEntryPoint` — returns proper `401 Unauthorized` instead of a bare `403`.
 - `AccessDeniedHandler` — returns proper `403 Forbidden` for authenticated users lacking permissions.
-- **Role-based authorization** — some endpoints are restricted to specific roles (e.g. creating a hotel/room requires `ADMIN`).
+- **Role-based authorization** — some endpoints are restricted to specific roles (e.g. creating a hotel/room requires `ADMIN`). The role is never accepted from the client: public registration always assigns `USER`.
 - **Object-level authorization** — e.g. `GET /bookings/{id}` verifies the booking belongs to the requesting user (protection against enumeration/IDOR): a booking that doesn't exist and a booking that belongs to someone else both return an identical `404`.
+- Login returns the same error for "unknown email" and "wrong password" (no user enumeration).
 
 ## DevOps
 
 - **Docker multi-stage build** — a dedicated `Dockerfile` for each of the 5 services.
 - **`docker-compose.yml`** — spins up the whole system with one command: 4 PostgreSQL instances (one per service that needs a DB), Kafka (KRaft mode, no ZooKeeper), and all 5 Spring Boot applications.
-- Configuration is parameterized via environment variables (`DB_HOST`, `DB_PORT`, `KAFKA_HOST`, `HOTEL_SERVICE_HOST`, etc.) using the `${VAR:default}` syntax in `application.yml` — this allows the project to run both locally (with `localhost` and distinct DB ports) and fully inside Docker Compose (with container DNS names).
+- **Persistent data** — each PostgreSQL database uses a named Docker volume, so data survives `docker compose down`. Use `docker compose down -v` to wipe it deliberately and start clean.
+- **Secrets via `.env`** — the database password is injected from a git-ignored `.env` file (see `.env.example`), not hardcoded in `docker-compose.yml`.
+- Configuration is parameterized via environment variables (`DB_HOST`, `DB_PORT`, `DB_PASSWORD`, `KAFKA_HOST`, `HOTEL_SERVICE_HOST`, `USER_SERVICE_HOST`, etc.) using the `${VAR:default}` syntax in `application.yml` — this allows the project to run both locally (with `localhost` and distinct DB ports) and fully inside Docker Compose (with container DNS names).
 - ✅ Final end-to-end test passed: `docker compose up --build` brings up the entire system, and the full flow — register → login → create hotel/room → create booking → Kafka Saga (payment-requests → payment-results) → booking confirmed → notification — worked correctly.
 
 ## Tech Stack
@@ -90,13 +94,15 @@ A learning-focused pet project: a hotel booking system built from scratch on a m
 
 Deliberately deferred improvements — understanding what to do next matters more than implementing all of it in a pet project:
 
-1. **`GET /users/{id}` for service-to-service calls** — no dedicated internal endpoint with API-key protection for inter-service calls to User Service yet.
-2. **Service Discovery** — service URLs are currently resolved via environment variables instead of being resolved dynamically (Eureka/Consul).
-3. **Key distribution for Docker** — RSA keys currently ship inside each service's `.jar` via `src/main/resources/keys/`, which is simple but not ideal (rebuilding the image is needed to rotate keys, and the private key must be present on disk before the first `docker compose up --build`). A cleaner approach would mount keys as a Docker volume or pull them from a secrets manager (HashiCorp Vault, AWS Secrets Manager) instead of baking them into the image.
-4. **No automated key-generation script** — generating the RSA key pair and copying the public key to each service is currently a manual step documented in Setup; a `generate-keys.sh`/`.ps1` script would make first-time setup a single command.
-5. **`depends_on` without healthchecks** — Docker Compose only checks "container started," not "application ready to accept connections." Full reliability requires `healthcheck`s (especially for the databases and Kafka).
-6. **Dead Letter Topic (DLT)** — if a Kafka consumer fails to deserialize/process a message, it can currently get "stuck"/lost instead of being routed to a separate topic for later inspection.
-7. **Contract testing, integration tests** — not yet written for these services; unit tests are being added incrementally, service by service (see below).
+1. **Service Discovery** — service URLs are currently resolved via environment variables instead of being resolved dynamically (Eureka/Consul).
+2. **Key distribution for Docker** — RSA keys currently ship inside each service's `.jar` via `src/main/resources/keys/`, which is simple but not ideal (rebuilding the image is needed to rotate keys, and the private key must be present on disk before the first `docker compose up --build`). A cleaner approach would mount keys as a Docker volume or pull them from a secrets manager (HashiCorp Vault, AWS Secrets Manager) instead of baking them into the image.
+3. **No automated key-generation script** — generating the RSA key pair and copying the public key to each service is currently a manual step documented in Setup; a `generate-keys.sh`/`.ps1` script would make first-time setup a single command.
+4. **Default secret values in `application.yml`** — some `${VAR:default}` fallbacks (e.g. the internal API key) exist for local-run convenience; in a real deployment they should come only from the environment or a secrets manager.
+5. **Kafka data is not persisted** — only the databases use volumes. After `docker compose down` Kafka topics and offsets are lost, which can leave bookings in `PENDING` whose events are gone.
+6. **`depends_on` without healthchecks** — Docker Compose only checks "container started," not "application ready to accept connections." Full reliability requires `healthcheck`s (especially for the databases and Kafka).
+7. **Dead Letter Topic (DLT)** — if a Kafka consumer fails to deserialize/process a message, it can currently get "stuck"/lost instead of being routed to a separate topic for later inspection.
+8. **No retries / idempotency** — the `RoomClient` call has a single attempt, and Kafka consumers are not idempotent (at-least-once delivery could process a message twice).
+9. **Contract testing, integration tests** — not yet written for these services; unit tests are being added incrementally, service by service (see below).
 
 ### Testing status
 
@@ -119,7 +125,17 @@ These topics were discussed conceptually but not implemented — a separate stag
 
 ### Setup
 
-Before running the project, generate an RSA key pair for JWT signing (RS256). The private key is never committed to git — each developer/environment needs to generate their own.
+**1. Environment variables.** Copy the example file and fill in your own values:
+
+```powershell
+Copy-Item .env.example .env
+```
+
+`.env` is git-ignored and must never be committed. At minimum set `DB_PASSWORD`.
+
+> Note: `POSTGRES_PASSWORD` is only applied when a database volume is first initialized. If you change `DB_PASSWORD` later, either run `docker compose down -v` (this deletes all data) or change the password inside PostgreSQL itself.
+
+**2. RSA key pair for JWT (RS256).** The private key is never committed to git — each developer/environment needs to generate their own:
 
 ```powershell
 cd user-service/src/main/resources
@@ -143,7 +159,15 @@ docker compose up --build
 
 Brings up all 5 services, 4 databases, and Kafka on a shared Docker network. The first run may take a few minutes (building the Maven images).
 
+To create an `ADMIN` (needed for creating hotels and rooms), register a user and promote them manually:
+
+```powershell
+docker exec -it user-db psql -U postgres -d user_db -c "UPDATE users SET role = 'ADMIN' WHERE email = 'your@email.com';"
+```
+
+Then log in again — the role is baked into the token at login time.
+
 Ports for testing via Postman/curl:
 - `POST http://localhost:8081/users/register`, `/users/login`
-- `POST http://localhost:8082/hotels`, `/rooms`
+- `POST http://localhost:8082/hotels`, `/rooms` (ADMIN), `GET /rooms?hotelId=...`, `GET /rooms/{id}`
 - `POST http://localhost:8083/bookings`, `GET /bookings/{id}`
